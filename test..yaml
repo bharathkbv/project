@@ -1,0 +1,283 @@
+Description:
+    This template deploys a VPC, with a pair of public and private subnets spread
+    across two Availability Zones. It deploys an internet gateway, with a default
+    route on the public subnets. It deploys a pair of NAT gateways (one in each AZ),
+    and default routes for them in the private subnets.
+
+Parameters:
+    EnvironmentName:
+        Description: An environment name that is prefixed to resource names
+        Type: String
+        Default: test
+
+    
+    Vpc2CIDR:
+        Description: Please enter the IP range (CIDR notation) for this VPC2
+        Type: String
+        Default: 10.0.0.0/16
+   
+    VPC2subnet1CIDR:
+        Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+        Type: String
+        Default: 10.0.1.0/28
+
+    VPC2subnet2CIDR:
+        Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
+        Type: String
+        Default: 10.0.2.0/28
+
+    Key:
+        Description: Please enter key
+        Type: String
+        Default: testkey
+    
+    PrivateSubnetImageId:
+        Description: Please enter key
+        Type: String
+        Default: ami-00791cfc13337a406
+    
+    PublicSubnetImageId:
+        Description: Please enter key
+        Type: String
+        Default: ami-00791cfc13337a406
+        
+    InstanceType:
+        Description: Please enter instance type
+        Type: String
+        Default: t2.micro
+        
+ 
+Resources: 
+   
+    TESTVPC:
+        Type: AWS::EC2::VPC
+        Properties:
+            CidrBlock: !Ref Vpc2CIDR
+            EnableDnsSupport: true 
+            EnableDnsHostnames: true
+            Tags:
+                - Key: Name
+                  Value: !Ref EnvironmentName
+   
+    PublicSubnet:
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref TESTVPC
+            CidrBlock: !Ref VPC2subnet1CIDR
+            MapPublicIpOnLaunch: true
+            Tags:
+                - Key: Name
+                  Value: !Sub ${EnvironmentName}  Subnet1
+
+    PrivateSubnet:
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref TESTVPC
+            CidrBlock: !Ref VPC2subnet2CIDR
+            MapPublicIpOnLaunch: true
+            Tags:
+                - Key: Name
+                  Value: !Sub ${EnvironmentName}  Subnet2
+
+   
+    TESTVPCInternetGateway:
+        Type: AWS::EC2::InternetGateway
+        Properties:
+            Tags:
+                - Key: ENV
+                  Value: !Ref EnvironmentName
+
+    TESTVPCInternetGatewayAttachment:
+        Type: AWS::EC2::VPCGatewayAttachment
+        Properties:
+            InternetGatewayId: !Ref TESTVPCInternetGateway
+            VpcId: !Ref TESTVPC
+ 
+    TESTVPCSecurityGroup1:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: Allow http to client host
+            VpcId: !Ref TESTVPC
+            SecurityGroupIngress:
+                - IpProtocol: tcp
+                  FromPort: 3389
+                  ToPort: 3389
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: tcp
+                  FromPort: 80
+                  ToPort: 80
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: tcp
+                  FromPort: 443
+                  ToPort: 443
+            SecurityGroupEgress:
+                - IpProtocol: tcp
+                  FromPort: 0
+                  ToPort: 65325
+                  CidrIp: 0.0.0.0/0
+                  
+    TESTVPCSecurityGroup2:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: Allow http to client host
+            VpcId: !Ref TESTVPC
+            SecurityGroupIngress:
+                - IpProtocol: tcp
+                  FromPort: 80
+                  ToPort: 80
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: tcp
+                  FromPort: 443
+                  ToPort: 443
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: tcp
+                  FromPort: 8080
+                  ToPort: 8080
+                  CidrIp: 0.0.0.0/0
+                - IpProtocol: tcp
+                  FromPort: 3389
+                  ToPort: 3389
+                  CidrIp: 0.0.0.0/0
+            SecurityGroupEgress:
+                - IpProtocol: tcp
+                  FromPort: 0
+                  ToPort: 65325
+                  CidrIp: 0.0.0.0/0 
+ 
+    TESTVPCSecurityGroup3:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: Allow http to client host
+            VpcId: !Ref TESTVPC
+            SecurityGroupIngress:
+                - IpProtocol: tcp
+                  FromPort: 1872
+                  ToPort: 1872
+                  CidrIp: 10.0.0.0/16
+            SecurityGroupEgress:
+                - IpProtocol: tcp
+                  FromPort: 0
+                  ToPort: 65325
+                  CidrIp: 0.0.0.0/0 
+    TESTVPCRouteTable:
+        Type: AWS::EC2::RouteTable
+        Properties:
+            VpcId: !Ref TESTVPC
+            Tags:
+                - Key: Name
+                  Value: !Sub ${EnvironmentName}:TESTVPC Routes
+   
+    TESTVPCRoute:
+        Type: AWS::EC2::Route
+        DependsOn: TESTVPCInternetGatewayAttachment
+        Properties:        
+            RouteTableId: !Ref TESTVPCRouteTable
+            DestinationCidrBlock: 0.0.0.0/0
+            GatewayId: !Ref TESTVPCInternetGateway
+
+    PublicRouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+          RouteTableId: !Ref TESTVPCRouteTable
+          SubnetId: !Ref PublicSubnet
+    PublicSubnetEC2:
+        Type: AWS::EC2::Instance
+        Properties:
+            KeyName: !Ref Key
+            ImageId: !Ref PublicSubnetImageId
+            InstanceType: t2.micro
+            SubnetId: !Ref PublicSubnet
+            IamInstanceProfile : !Ref InstanceProfile
+            SecurityGroupIds: 
+                - !Ref TESTVPCSecurityGroup1
+                - !Ref TESTVPCSecurityGroup3
+            Tags:
+                - Key: Name
+                  Value: !Ref EnvironmentName
+    PrivateSubnetEC2Instance1:
+        Type: AWS::EC2::Instance
+        Properties:
+            KeyName: !Ref Key
+            ImageId: !Ref PrivateSubnetImageId
+            InstanceType: t2.micro
+            SubnetId: !Ref PrivateSubnet
+            IamInstanceProfile : !Ref InstanceProfile
+            SecurityGroupIds: 
+                - !Ref TESTVPCSecurityGroup2
+                - !Ref TESTVPCSecurityGroup3
+            Tags:
+                - Key: Name
+                  Value: !Ref EnvironmentName
+    PrivateSubnetEC2Instance2:
+        Type: AWS::EC2::Instance
+        Properties:
+            KeyName: !Ref Key
+            ImageId: !Ref PrivateSubnetImageId
+            InstanceType: t2.micro
+            SubnetId: !Ref PrivateSubnet
+            IamInstanceProfile : !Ref InstanceProfile
+            SecurityGroupIds: 
+                - !Ref TESTVPCSecurityGroup2
+                - !Ref TESTVPCSecurityGroup3
+            Tags:
+                - Key: Name
+                  Value: !Ref EnvironmentName
+    Role: 
+        Type: "AWS::IAM::Role"
+        Properties: 
+          AssumeRolePolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - 
+                Effect: "Allow"
+                Principal: 
+                  Service: 
+                    - "ec2.amazonaws.com"
+                Action: 
+                  - "sts:AssumeRole"
+          Path: "/"
+    RolePolicies: 
+        Type: "AWS::IAM::Policy"
+        Properties: 
+          PolicyName: "role"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: "Allow"
+                Action: "*"
+                Resource: "*"
+          Roles: 
+            - Ref: "Role"
+    InstanceProfile: 
+        Type: "AWS::IAM::InstanceProfile"
+        Properties: 
+          Path: "/"
+          Roles: 
+            - Ref: "Role"
+            
+S3Endpoint:
+  Type: 'AWS::EC2::VPCEndpoint'
+  Properties:
+    PolicyDocument:
+      Version: 2012-10-17
+      Statement:
+        - Effect: Allow
+          Principal: '*'
+          Action:
+            - 's3:GetObject'
+          Resource:
+            - 'arn:aws:s3:::examplebucket/*'
+    RouteTableIds:
+      - !Ref routetableA
+      - !Ref routetableB
+    ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+    VpcId: !Ref VPCID      
+Outputs: 
+
+    VPC2subnet1:
+        Description: A reference to the public subnet in the 1st Availability Zone
+        Value: !Ref PublicSubnet
+
+    VPC2subnet2:
+        Description: A reference to the public subnet in the 1st Availability Zone
+        Value: !Ref PrivateSubnet
